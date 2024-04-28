@@ -1,0 +1,117 @@
+---
+title: "CS573 Final R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r}
+library(dplyr)
+library(pROC)
+library(ggplot2)
+```
+
+
+```{r}
+#train set 
+df <- read.csv("UNSW_NB15_training-set.csv")
+
+#test set 
+df_test <- read.csv("UNSW_NB15_testing-set.csv")
+
+df2 <- df[-c(1,4,44)]
+df2$proto <- as.factor(df2$proto)
+df2$state <- as.factor(df2$state)
+
+#adding new variables
+df2["network_bytes"] = df2["sbytes"] + df2["dbytes"]
+df2['prop_bytes'] = df2["sbytes"] / (df2["dbytes"] + 0.005)
+
+df_test["network_bytes"] = df_test["sbytes"] + df_test["dbytes"]
+df_test['prop_bytes'] = df_test["sbytes"] / (df_test["dbytes"] + 0.005 )
+subset_test <- subset(df_test, state != "ACC" & state != "CLO")
+#removing correlated variables - sloss, ct_srv_dst, ct_src_dport_ltm, dpkts, ltime, dloss, ct_dst_src_ltm
+
+
+
+#df3 <- sample_n(df2, 175341)
+#train <- sample_frac(df3, .75)
+#sid <- as.numeric(rownames(train))
+#test <- df3[-sid, ]
+
+
+#fitting Logistic Regression Model
+mod1 <- glm(label~ dur + proto + state + spkts + sbytes + rate + sttl + dttl + sload + 
+              dload + sinpkt + dinpkt + sjit +djit + swin + stcpb + dtcpb + dwin + 
+              tcprtt + synack + ackdat + smean + dmean + trans_depth + response_body_len +
+              ct_srv_src + ct_state_ttl + ct_dst_ltm + ct_dst_sport_ltm + 
+              is_ftp_login + ct_ftp_cmd + ct_flw_http_mthd + ct_src_ltm + 
+              is_sm_ips_ports, family = binomial, data = df2)
+```
+
+
+```{r}
+table(subset_test$label)
+```
+
+```{r}
+mod2 <- glm(label~ dur + proto + state + spkts + sbytes + rate + sttl + dttl + sload + 
+              dload + sinpkt + dinpkt + sjit +djit + swin + stcpb + dtcpb + dwin + 
+              tcprtt + synack + ackdat + smean + dmean + trans_depth + response_body_len +
+              ct_srv_src + ct_state_ttl + ct_dst_ltm + ct_dst_sport_ltm + 
+              is_ftp_login + ct_ftp_cmd + ct_flw_http_mthd + ct_src_ltm + 
+              is_sm_ips_ports + network_bytes, family = binomial, data = df2)
+
+```
+```{r}
+mod3 <- glm(label~ dur + proto + state + sttl + dttl + dmean + ct_state_ttl + network_bytes, family = binomial, data = df2) 
+```
+
+```{r}
+mod4 <- glm(label~ proto + state + dur + sttl + dttl + dmean + ct_state_ttl + network_bytes + ct_flw_http_mthd + 
+              ct_dst_sport_ltm + trans_depth + synack + sjit + sload + dload + sbytes + rate, family = binomial, data = df2)
+summary(mod4)
+```
+
+```{r}
+#predicting the new data
+pred <- predict.glm(mod4, newdata= subset_test, type = "response")
+nums <- as.numeric(pred > 0.80)
+```
+
+
+```{r}
+#Confusion Matrix 
+library(caret)
+
+confusionMatrix(data = as.factor(nums), reference = as.factor(subset_test$label))
+```
+```{r}
+#ROC Curve
+rocobj1 <-roc(subset_test$label, pred)
+auc1 <- round(auc(subset_test$label, pred), 4)
+
+rocobj2 <-roc(subset_test$label, pred)
+auc2 <- round(auc(subset_test$label, pred), 4)
+
+rocobj3 <- roc(subset_test$label, pred)
+auc3 <- round(auc(subset_test$label, pred), 4)
+
+rocobj4 <-roc(subset_test$label, pred)
+auc4 <- round(auc(subset_test$label, pred), 4)
+
+#create ROC plot
+ggroc(rocobj, colour = 'steelblue', size = 2) +
+  ggtitle(paste0('ROC Curve ', '(AUC = ', auc, ')'))
+
+#Create Second ROC plot 
+ggroc(list(Model1 = rocobj1, Model2 = rocobj2, Model3= rocobj3 , Model4 = rocobj4))
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
